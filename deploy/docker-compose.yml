@@ -1,0 +1,65 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tracefoundry
+      POSTGRES_USER: tracefoundry
+      POSTGRES_PASSWORD: tracefoundry
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  ingest-api:
+    build:
+      context: ../apps/ingest-api
+      dockerfile: Dockerfile
+    env_file:
+      - ../.env
+    environment:
+      DB_URL: ${DB_URL:-postgresql+psycopg://tracefoundry:tracefoundry@postgres:5432/tracefoundry}
+      TRACEFOUNDRY_ENV: ${TRACEFOUNDRY_ENV:-local}
+      PAYLOAD_DIR: ${PAYLOAD_DIR:-/data/payloads}
+      PAYLOAD_STORE: ${PAYLOAD_STORE:-filesystem}
+      BASIC_AUTH_USERS: ${BASIC_AUTH_USERS:-viewer:viewer:viewer,engineer:engineer:engineer,admin:admin:admin}
+      RETENTION_TRACES_DAYS: ${RETENTION_TRACES_DAYS:-7}
+      RETENTION_PAYLOADS_DAYS: ${RETENTION_PAYLOADS_DAYS:-3}
+      ATTRIBUTE_ALLOWLIST_PATH: ${ATTRIBUTE_ALLOWLIST_PATH:-/app/deploy/trace-allowlist.yaml}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+    volumes:
+      - ./trace-allowlist.yaml:/app/deploy/trace-allowlist.yaml:ro
+      - ../.data/payloads:/data/payloads
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.101.0
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    depends_on:
+      - ingest-api
+    ports:
+      - "4318:4318"
+
+  trace-ui:
+    build:
+      context: ../apps/trace-ui
+      dockerfile: Dockerfile
+    env_file:
+      - ../.env
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://ingest-api:8000}
+      NEXT_PUBLIC_BASIC_AUTH: ${NEXT_PUBLIC_BASIC_AUTH:-viewer:viewer}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - ingest-api
+
+volumes:
+  postgres-data:
