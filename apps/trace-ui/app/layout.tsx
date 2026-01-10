@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { SidebarNav, type NavSection } from "@/components/sidebar-nav";
 import { cn } from "@/lib/utils";
 import "./globals.css";
 
@@ -9,32 +10,20 @@ export const metadata: Metadata = {
   description: "Trace explorer for agentic workflows"
 };
 
-type NavItem = {
-  label: string;
-  icon: string;
-  href: string;
-  active?: boolean;
-};
-
-type NavSection = {
-  title: string;
-  items: NavItem[];
-};
-
 const navSections: NavSection[] = [
   {
     title: "Platform",
     items: [
-      { label: "Dashboard", icon: "dashboard", href: "/", active: true },
-      { label: "Traces", icon: "timeline", href: "/?view=errors" },
-      { label: "Ingestion", icon: "monitoring", href: "/?view=slow" }
+      { label: "Dashboard", icon: "dashboard", href: "/" },
+      { label: "Traces", icon: "timeline", href: "/traces" },
+      { label: "Ingestion", icon: "monitoring", href: "/ingestion" }
     ]
   },
   {
     title: "Configuration",
     items: [
-      { label: "Settings", icon: "settings", href: "#" },
-      { label: "Team", icon: "group", href: "#" }
+      { label: "Settings", icon: "settings", href: "/settings" },
+      { label: "Team", icon: "group", href: "/team" }
     ]
   }
 ] as const;
@@ -59,37 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </span>
               </div>
             </div>
-            <nav className="flex-1 px-4 py-8 space-y-1 overflow-y-auto">
-              {navSections.map((section) => (
-                <div key={section.title} className="pb-3 pt-4 first:pt-0">
-                  <p className="px-4 pb-3 text-[10px] uppercase tracking-[0.2em] font-bold text-slate-600 font-mono">
-                    {section.title}
-                  </p>
-                  {section.items.map((item) => (
-                    <Link
-                      key={item.label}
-                      href={item.href}
-                      className={cn(
-                        "nav-item relative flex items-center gap-3.5 px-4 py-2.5 text-sm font-medium rounded-r-lg transition-all group",
-                        item.active
-                          ? "active text-cyan-100"
-                          : "text-slate-400 hover:text-slate-100 hover:bg-white/5"
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "material-symbols-outlined text-[20px]",
-                          item.active ? "text-cyan-400" : "group-hover:text-cyan-400 text-slate-500"
-                        )}
-                      >
-                        {item.icon}
-                      </span>
-                      {item.label}
-                    </Link>
-                  ))}
-                </div>
-              ))}
-            </nav>
+            <SidebarNav sections={navSections} />
             <div className="p-4 border-t border-white/5">
               <button className="flex items-center gap-3 w-full px-3 py-3 text-sm font-medium text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors group">
                 <div className="relative">
@@ -103,8 +62,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <div className="absolute bottom-0 right-0 w-2 h-2 bg-cyan-500 rounded-full border border-[#0f1115] shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
                 </div>
                 <div className="flex-1 text-left overflow-hidden">
-                  <p className="text-xs text-slate-200 truncate font-mono">Alex Dev</p>
-                  <p className="text-[10px] text-slate-600 truncate font-mono">alex@tracefoundry.com</p>
+                  <p className="text-xs text-slate-200 truncate font-mono">Anirudh Tulasi</p>
+                  <p className="text-[10px] text-slate-600 truncate font-mono">at@tracefoundry.com</p>
                 </div>
               </button>
             </div>
