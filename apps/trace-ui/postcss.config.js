@@ -1,6 +1,6 @@
 module.exports = {
   plugins: {
-    "./tailwind.offline.postcss.js": true,
+    "@tailwindcss/postcss": {},
     autoprefixer: {}
   }
 };

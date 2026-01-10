@@ -1,13 +1,12 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { ArrowLeft, Cpu, Layers, Network, Timer } from "lucide-react";
 import { fetchTrace, fetchTraceSpans } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
-import { buttonClass } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 type TraceDetailPageProps = {
-  params: { traceId: string };
+  params: Promise<{ traceId: string }>;
 };
 
 const formatter = {
@@ -64,31 +63,33 @@ const buildTimeline = (spans: Awaited<ReturnType<typeof fetchTraceSpans>>) => {
   }));
 };
 
-const renderSpanNode = (node: SpanNode): JSX.Element => (
-  <li key={node.span_id} className="space-y-1 rounded-xl border border-slate-100 bg-white/90 p-3 shadow-sm">
+const renderSpanNode = (node: SpanNode): ReactNode => (
+  <li key={node.span_id} className="space-y-2 rounded-xl border border-white/10 bg-white/5 p-4 text-slate-200">
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-[11px] text-slate-500">{node.span_id.slice(0, 10)}…</span>
-          <span className="text-sm font-semibold text-slate-900">{node.name}</span>
-          <Badge variant="outline">{node.kind ?? "SPAN"}</Badge>
+          <span className="text-sm font-semibold text-white">{node.name}</span>
+          <Badge className="bg-white/10 text-slate-200 border border-white/10">{node.kind ?? "SPAN"}</Badge>
         </div>
-        <Badge variant="info">{formatter.duration(node.duration_ms)}</Badge>
+        <Badge className="bg-cyan-500/20 text-cyan-200 border border-cyan-500/30">{formatter.duration(node.duration_ms)}</Badge>
       </div>
       <p className="text-xs text-slate-500">
         Status: {node.status_code ?? "OK"} · parent {node.parent_span_id ? node.parent_span_id.slice(0, 8) : "root"}
       </p>
     </div>
     {node.children.length > 0 && (
-      <ul className="mt-3 space-y-2 border-l border-dashed border-slate-200 pl-4">
-        {node.children.map((child) => renderSpanNode(child))}
-      </ul>
+      <ul className="mt-3 space-y-2 border-l border-dashed border-white/20 pl-4">{node.children.map((child) => renderSpanNode(child))}</ul>
     )}
   </li>
 );
 
 export default async function TraceDetail({ params }: TraceDetailPageProps) {
-  const [trace, spans] = await Promise.all([fetchTrace(params.traceId), fetchTraceSpans(params.traceId)]);
+  const resolvedParams = await params;
+  const [trace, spans] = await Promise.all([
+    fetchTrace(resolvedParams.traceId),
+    fetchTraceSpans(resolvedParams.traceId)
+  ]);
   const spanTree = buildSpanTree(spans);
   const timeline = buildTimeline(spans);
 
@@ -102,47 +103,48 @@ export default async function TraceDetail({ params }: TraceDetailPageProps) {
   ];
 
   return (
-    <section className="space-y-10">
-      <div className="rounded-[28px] border border-slate-100 bg-white/90 p-8 shadow-[0_30px_80px_-45px_rgba(15,23,42,0.6)]">
+    <section className="space-y-8 text-slate-200">
+      <div className="bento-card glass-highlight p-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.4em] text-slate-500">Trace detail</p>
-            <h1 className="mt-1 text-4xl font-semibold tracking-tight text-slate-900">
-              {trace.root_span_name ?? "Agent run"}
-            </h1>
+            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Trace detail</p>
+            <h1 className="mt-1 text-4xl font-semibold tracking-tight text-white">{trace.root_span_name ?? "Agent run"}</h1>
             <p className="mt-2 font-mono text-xs text-slate-500">{trace.trace_id}</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Badge variant={trace.error_type ? "destructive" : "success"}>
+            <Badge
+              className={trace.error_type ? "bg-rose-500/20 text-rose-200 border border-rose-500/40" : "bg-emerald-500/20 text-emerald-200 border border-emerald-500/40"}
+            >
               {trace.error_type ? trace.error_type : trace.status_code ?? "OK"}
             </Badge>
-            <Link href="/" className={buttonClass("ghost", "text-slate-600 hover:text-slate-900")}>
-              <span className="inline-flex items-center gap-2">
-                <ArrowLeft className="h-4 w-4" />
-                Back to explorer
-              </span>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-200 hover:bg-white/10 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to explorer
             </Link>
           </div>
         </div>
         <div className="mt-6 grid gap-4 md:grid-cols-3">
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <p className="text-xs uppercase tracking-[0.4em] text-slate-500">Service</p>
-            <p className="mt-2 flex items-center gap-2 text-xl font-semibold text-slate-900">
-              <Network className="h-4 w-4 text-brand-500" />
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Service</p>
+            <p className="mt-2 flex items-center gap-2 text-xl font-semibold text-white">
+              <Network className="h-4 w-4 text-cyan-400" />
               {trace.service_name ?? "Unknown"}
             </p>
           </div>
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <p className="text-xs uppercase tracking-[0.4em] text-slate-500">Duration</p>
-            <p className="mt-2 flex items-center gap-2 text-xl font-semibold text-slate-900">
-              <Timer className="h-4 w-4 text-emerald-500" />
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Duration</p>
+            <p className="mt-2 flex items-center gap-2 text-xl font-semibold text-white">
+              <Timer className="h-4 w-4 text-emerald-400" />
               {formatter.duration(trace.duration_ms)}
             </p>
           </div>
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <p className="text-xs uppercase tracking-[0.4em] text-slate-500">Cost</p>
-            <p className="mt-2 flex items-center gap-2 text-xl font-semibold text-slate-900">
-              <Layers className="h-4 w-4 text-amber-500" />
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Cost</p>
+            <p className="mt-2 flex items-center gap-2 text-xl font-semibold text-white">
+              <Layers className="h-4 w-4 text-amber-400" />
               {formatter.cost(trace.cost_usd_estimate)}
             </p>
           </div>
@@ -150,95 +152,78 @@ export default async function TraceDetail({ params }: TraceDetailPageProps) {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
-        <Card className="p-0">
-          <CardHeader className="px-6 pt-6">
-            <CardTitle className="text-xl">Runtime anatomy</CardTitle>
-            <CardDescription>A combined timeline + depth map for every persisted span.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6 px-6 pb-6">
-            {timeline.length ? (
-              <div className="space-y-3 rounded-3xl border border-slate-100 bg-white/90 p-4">
-                {timeline.map((span) => (
-                  <div key={span.id} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs text-slate-500">
-                      <span className="font-semibold text-slate-700">{span.name}</span>
-                      <span>{formatter.duration(span.duration)}</span>
-                    </div>
-                    <div className="relative h-2 w-full rounded-full bg-slate-100">
-                      <div
-                        className="absolute h-2 rounded-full bg-gradient-to-r from-brand-400 to-brand-600"
-                        style={{ left: `${span.offset}%`, width: `${Math.max(span.width, 2)}%` }}
-                      />
-                    </div>
+        <div className="bento-card p-6 space-y-6">
+          <div>
+            <h2 className="text-lg font-medium text-white">Runtime anatomy</h2>
+            <p className="text-xs text-slate-500">A combined timeline + depth map for every persisted span.</p>
+          </div>
+          {timeline.length ? (
+            <div className="space-y-3 rounded-3xl border border-white/10 bg-white/5 p-4">
+              {timeline.map((span) => (
+                <div key={span.id} className="space-y-1">
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span className="font-semibold text-slate-200">{span.name}</span>
+                    <span>{formatter.duration(span.duration)}</span>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
-                No span timeline available for this trace.
-              </div>
-            )}
-
-            <div>
-              <p className="text-sm font-semibold text-slate-900">Span hierarchy</p>
-              {spanTree.length === 0 ? (
-                <div className="mt-3 rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
-                  No spans were persisted for this trace.
-                </div>
-              ) : (
-                <ScrollArea className="mt-4 h-[420px] rounded-3xl border border-slate-100 bg-white/90 p-4">
-                  <ul className="space-y-3">{spanTree.map((node) => renderSpanNode(node))}</ul>
-                </ScrollArea>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="space-y-6">
-          <Card className="bg-slate-900 text-white">
-            <CardHeader>
-              <CardTitle>Trace summary</CardTitle>
-              <CardDescription className="text-slate-300">
-                Snapshot of metadata stored alongside the trace document.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm text-slate-200">
-              {attributes.map((attr) => (
-                <div key={attr.label} className="flex justify-between border-b border-white/10 pb-3">
-                  <span>{attr.label}</span>
-                  <span className="font-semibold text-white">{attr.value}</span>
+                  <div className="relative h-2 w-full rounded-full bg-white/10">
+                    <div
+                      className="absolute h-2 rounded-full bg-gradient-to-r from-cyan-400 to-indigo-500 shadow-[0_0_10px_rgba(34,211,238,0.35)]"
+                      style={{ left: `${span.offset}%`, width: `${Math.max(span.width, 2)}%` }}
+                    />
+                  </div>
                 </div>
               ))}
-              <div className="space-y-2">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Error metadata</p>
-                <p className="text-sm leading-relaxed">
-                  {trace.error_type ? `Reported as ${trace.error_type}` : "No errors propagated to root span."}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500">
+              No span timeline available for this trace.
+            </div>
+          )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Cpu className="h-4 w-4 text-brand-500" />
-                Resource attributes
-              </CardTitle>
-              <CardDescription>Quick peek at OTLP resource hints.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-slate-600">
-              <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-3">
-                <span>Idempotency</span>
-                <Badge variant="success">trace_id + span_id</Badge>
+          <div>
+            <p className="text-sm font-semibold text-white">Span hierarchy</p>
+            {spanTree.length === 0 ? (
+              <div className="mt-3 rounded-2xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500">
+                No spans were persisted for this trace.
               </div>
-              <div className="rounded-xl border border-slate-100 p-3">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Payload policy</p>
-                <p className="mt-1 text-sm text-slate-700">
-                  Prompts/tool payloads stored via blob refs (see ingest payload store on disk).
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+            ) : (
+              <ScrollArea className="mt-4 h-[420px] rounded-3xl border border-white/10 bg-white/5 p-4">
+                <ul className="space-y-3">{spanTree.map((node) => renderSpanNode(node))}</ul>
+              </ScrollArea>
+            )}
+          </div>
+        </div>
+        <div className="space-y-6">
+          <div className="bento-card p-6">
+            <h2 className="text-lg font-medium text-white">Trace metadata</h2>
+            <p className="text-xs text-slate-500 mb-4">Key-value pairs extracted from the source payload.</p>
+            <div className="grid gap-4">
+              {attributes.map((attribute) => (
+                <div key={attribute.label} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">{attribute.label}</p>
+                  <p className="mt-2 font-mono text-sm text-slate-200 break-all">{attribute.value ?? "n/a"}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="bento-card p-6 space-y-4">
+            <h2 className="text-lg font-medium text-white">Agent runtime</h2>
+            <p className="text-xs text-slate-500">CPU/memory costs are approximated per span.</p>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">CPU Allocation</p>
+              <p className="mt-2 flex items-center gap-2 text-xl font-semibold text-white">
+                <Cpu className="h-4 w-4 text-cyan-400" />
+                1 vCPU burst
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-[10px] uppercase tracking-[0.3em] text-slate-500">Memory</p>
+              <p className="mt-2 flex items-center gap-2 text-xl font-semibold text-white">
+                <Network className="h-4 w-4 text-cyan-400" />
+                512 MB reserved
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </section>

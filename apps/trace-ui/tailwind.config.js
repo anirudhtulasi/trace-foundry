@@ -19,6 +19,54 @@ const config = {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        slate: {
+          50: "#f8fafc",
+          100: "#f1f5f9",
+          200: "#e2e8f0",
+          300: "#cbd5f5",
+          400: "#94a3b8",
+          500: "#64748b",
+          600: "#475569",
+          700: "#334155",
+          800: "#1e293b",
+          850: "#151e2e",
+          900: "#0f172a",
+          950: "#020617"
+        },
+        emerald: {
+          50: "#ecfdf5",
+          100: "#d1fae5",
+          500: "#10b981",
+          600: "#059669"
+        },
+        amber: {
+          50: "#fffbeb",
+          100: "#fef3c7",
+          500: "#f59e0b",
+          600: "#d97706",
+          700: "#b45309"
+        },
+        blue: {
+          50: "#eff6ff",
+          600: "#2563eb"
+        },
+        rose: {
+          50: "#fff1f2",
+          100: "#ffe4e6",
+          500: "#f43f5e",
+          700: "#be123c"
+        },
+        green: {
+          100: "#dcfce7",
+          700: "#15803d"
+        },
+        cyan: {
+          400: "#22d3ee",
+          500: "#06b6d4"
+        },
+        indigo: {
+          500: "#6366f1"
+        },
         brand: {
           50: "#f0f6ff",
           100: "#dce8ff",
@@ -31,6 +79,10 @@ const config = {
           800: "#082983",
           900: "#0b2861"
         }
+      },
+      fontFamily: {
+        sans: ["Inter", "system-ui", "sans-serif"],
+        mono: ["JetBrains Mono", "SFMono-Regular", "Menlo", "monospace"]
       },
       borderRadius: {
         lg: "0.75rem",

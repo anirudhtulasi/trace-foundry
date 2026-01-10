@@ -1,10 +1,5 @@
 import Link from "next/link";
-import { Activity, AlertTriangle, CircleDollarSign, Filter, LineChart, Network, Timer } from "lucide-react";
 import { fetchTraces } from "@/lib/api";
-import { buttonClass } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
 const formatter = {
@@ -13,17 +8,32 @@ const formatter = {
   cost: (value?: number) => (value ? `$${value.toFixed(4)}` : "—")
 };
 
-const statusTone = (status?: string | null) => {
-  if (!status) return "outline";
-  if (status?.toLowerCase().includes("error")) return "destructive";
-  if (status?.toLowerCase().includes("retry")) return "warning";
-  return "info";
+const statusTone = (status?: string | null, hasError?: boolean) => {
+  if (hasError || status?.toLowerCase().includes("error")) {
+    return {
+      dot: "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]",
+      ping: "bg-rose-500",
+      label: "Error"
+    };
+  }
+  if (status?.toLowerCase().includes("retry")) {
+    return {
+      dot: "bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.6)]",
+      ping: "bg-amber-400",
+      label: "Retrying"
+    };
+  }
+  return {
+    dot: "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]",
+    ping: "bg-emerald-500",
+    label: "Success"
+  };
 };
 
 type HomePageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     view?: string;
-  };
+  }>;
 };
 
 const viewPresets = [
@@ -33,7 +43,8 @@ const viewPresets = [
 ] as const;
 
 export default async function HomePage({ searchParams }: HomePageProps) {
-  const activeView = searchParams?.view ?? "all";
+  const resolvedSearchParams = await searchParams;
+  const activeView = resolvedSearchParams?.view ?? "all";
   const traces = await fetchTraces();
   const filteredTraces = traces.filter((trace) => {
     if (activeView === "errors") {
@@ -51,143 +62,310 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const errorCount = traces.filter((trace) => trace.status_code?.toLowerCase().includes("error") || trace.error_type).length;
   const successRate = totalTraces ? ((totalTraces - errorCount) / totalTraces) * 100 : 100;
   const latestTrace = traces[0];
+  const avgTokens =
+    totalTraces && traces.length
+      ? Math.round(
+          traces.reduce((acc, trace) => acc + ((trace.token_in ?? 0) + (trace.token_out ?? 0)), 0) / totalTraces
+        )
+      : 0;
 
-  const serviceBreakdown = Object.entries(
-    traces.reduce<Record<string, number>>((acc, trace) => {
-      if (!trace.service_name) return acc;
-      acc[trace.service_name] = (acc[trace.service_name] ?? 0) + 1;
-      return acc;
-    }, {})
-  )
+  const serviceCounts = traces.reduce<Record<string, number>>((acc, trace) => {
+    if (!trace.service_name) return acc;
+    acc[trace.service_name] = (acc[trace.service_name] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const serviceBreakdown = Object.entries(serviceCounts)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3);
 
-  const environmentCounts = Object.entries(
-    traces.reduce<Record<string, number>>((acc, trace) => {
-      const env = trace.environment ?? "unknown";
-      acc[env] = (acc[env] ?? 0) + 1;
-      return acc;
-    }, {})
-  );
+  const latestAnomaly = filteredTraces.find((trace) => trace.error_type || trace.status_code?.toLowerCase().includes("error"));
 
   return (
-    <section className="space-y-12">
-      <div className="overflow-hidden rounded-[32px] border border-white/60 bg-gradient-to-br from-white via-white to-brand-50/40 p-8 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.45)]">
-        <div className="flex flex-wrap items-center justify-between gap-6">
-          <div className="space-y-4 max-w-2xl">
-            <p className="text-xs uppercase tracking-[0.4em] text-slate-500">Live analytics</p>
-            <h1 className="text-4xl font-semibold tracking-tight text-slate-900">
-              Trace Explorer for deterministic agent workloads
-            </h1>
-            <p className="text-base text-slate-600">
-              Each row streaming into this surface originated from the OTLP collector and is synced into the TraceFoundry
-              Postgres store with payload redaction enforced.
-            </p>
-            <div className="flex flex-wrap items-center gap-3">
-              <Link href="http://localhost:8000/docs" target="_blank" className={buttonClass()}>
-                View ingest API docs
-              </Link>
-              <Link href="/" className={buttonClass("ghost", "text-slate-700 hover:text-slate-900")}>
-                Refresh data
-              </Link>
-              <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
-                Last trace: {latestTrace ? formatter.date(latestTrace.started_at) : "n/a"}
-              </div>
+    <section className="space-y-8">
+      <div className="flex flex-col gap-4 text-slate-300 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.3em] text-cyan-500/70 font-mono">Live analytics</p>
+          <h1 className="text-3xl font-extralight tracking-tight text-white">Ops Console</h1>
+          <p className="text-sm text-slate-500">Real-time observability and ingestion health monitoring.</p>
+          <p className="text-xs text-slate-600 font-mono mt-2">
+            Last trace {latestTrace ? formatter.date(latestTrace.started_at) : "n/a"}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="http://localhost:8000/docs"
+            target="_blank"
+            className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-xs font-mono font-medium text-slate-300 hover:bg-white/10 hover:text-white transition-all flex items-center gap-2 backdrop-blur-sm"
+          >
+            <span className="material-symbols-outlined text-[16px]">download</span>
+            EXPORT DOCS
+          </Link>
+          <Link
+            href="/"
+            className="px-4 py-2 bg-cyan-950/30 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-900/40 hover:border-cyan-400/50 hover:shadow-[0_0_15px_rgba(34,211,238,0.15)] rounded-lg text-xs font-mono font-medium transition-all flex items-center gap-2"
+          >
+            <span className="material-symbols-outlined text-[16px]">refresh</span>
+            REFRESH DATA
+          </Link>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <div className="bento-card p-6 flex flex-col justify-between h-44 relative overflow-hidden group glass-highlight">
+          <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-transparent pointer-events-none" />
+          <div className="absolute top-0 right-0 p-5 opacity-40 group-hover:opacity-80 transition-opacity">
+            <span className="material-symbols-outlined text-cyan-400/50">check_circle</span>
+          </div>
+          <div className="relative z-10">
+            <p className="text-[10px] font-bold text-cyan-500/70 uppercase tracking-[0.2em] font-mono">Success Rate</p>
+          </div>
+          <div className="relative z-10 mt-4">
+            <span className="text-4xl font-mono font-medium tracking-tight text-white neon-text-glow">
+              {successRate.toFixed(1)}%
+            </span>
+            <p className="text-xs text-slate-500 mt-1">{errorCount ? `${errorCount} traces surfaced errors` : "No errors"}</p>
+          </div>
+          <div className="w-full h-12 relative z-10 mt-auto">
+            <svg className="w-full h-full overflow-visible" viewBox="0 0 100 40" preserveAspectRatio="none">
+              <defs>
+                <filter id="glow-green" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="2" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+              </defs>
+              <path
+                d="M0 30 C 10 32, 20 25, 30 28 S 50 15, 60 20 S 80 5, 100 10"
+                stroke="#22d3ee"
+                strokeWidth="2"
+                fill="none"
+                vectorEffect="non-scaling-stroke"
+                filter="url(#glow-green)"
+              />
+            </svg>
+          </div>
+        </div>
+        <div className="bento-card p-6 flex flex-col justify-between h-44 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-5 opacity-30">
+            <span className="material-symbols-outlined text-slate-400">timeline</span>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] font-mono">Active Traces</p>
+            <div className="flex items-baseline gap-2 mt-3">
+              <span className="text-4xl font-mono font-medium tracking-tight text-slate-200">{totalTraces}</span>
+            </div>
+            <p className="text-xs text-slate-500 mt-2">Streaming from deterministic demo agent runs.</p>
+          </div>
+          <div className="w-full h-12 relative mt-auto opacity-60 group-hover:opacity-100 transition-opacity">
+            <svg className="w-full h-full overflow-visible" viewBox="0 0 100 40" preserveAspectRatio="none">
+              <path
+                d="M0 20 Q 25 30, 50 15 T 100 25"
+                fill="none"
+                stroke="#94a3b8"
+                strokeWidth="1.5"
+                vectorEffect="non-scaling-stroke"
+              />
+            </svg>
+          </div>
+        </div>
+        <div className="bento-card p-6 flex flex-col justify-between h-44 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-5 opacity-30">
+            <span className="material-symbols-outlined text-slate-400">schedule</span>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] font-mono">Avg Latency</p>
+            <div className="flex items-baseline gap-3 mt-3">
+              <span className="text-4xl font-mono font-medium tracking-tight text-slate-200">
+                {Math.round(avgDuration)}
+                <span className="text-lg text-slate-500 ml-1">ms</span>
+              </span>
+              <span className="text-[10px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
+                -12ms
+              </span>
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Card className="bg-slate-900 text-white">
-              <CardHeader className="pb-3">
-                <CardDescription className="text-slate-300">Success rate</CardDescription>
-                <CardTitle className="text-3xl">{successRate.toFixed(1)}%</CardTitle>
-              </CardHeader>
-              <CardContent className="text-xs text-slate-300">
-                {errorCount} traces surfaced errors in the last ingest window.
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardDescription>Avg latency</CardDescription>
-                  <CardTitle className="text-3xl">{formatter.duration(avgDuration)}</CardTitle>
-                </div>
-                <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600">
-                  <Timer className="h-5 w-5" />
-                </div>
-              </CardHeader>
-              <CardContent className="text-sm text-slate-500">
-                {formatter.cost(avgCost)} per trace · {totalTraces} traces inspected
-              </CardContent>
-            </Card>
+          <div className="w-full h-12 relative mt-auto opacity-80">
+            <svg className="w-full h-full overflow-visible" viewBox="0 0 100 40" preserveAspectRatio="none">
+              <path
+                d="M0 35 L 20 30 L 30 35 L 50 15 L 70 25 L 100 10"
+                fill="none"
+                stroke="#f59e0b"
+                strokeWidth="1.5"
+                vectorEffect="non-scaling-stroke"
+              />
+            </svg>
+          </div>
+        </div>
+        <div className="bento-card p-6 flex flex-col justify-between h-44 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-5 opacity-30">
+            <span className="material-symbols-outlined text-slate-400">token</span>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] font-mono">Token Usage</p>
+            <div className="flex items-baseline gap-2 mt-3">
+              <span className="text-4xl font-mono font-medium tracking-tight text-slate-200">{avgTokens}</span>
+            </div>
+            <p className="text-xs text-slate-500 mt-2">in/out combined</p>
+          </div>
+          <div className="w-full h-12 relative mt-auto opacity-60 group-hover:opacity-100 transition-opacity">
+            <svg className="w-full h-full overflow-visible" viewBox="0 0 100 40" preserveAspectRatio="none">
+              <path
+                d="M0 35 C 30 35, 60 10, 100 5"
+                fill="none"
+                stroke="#6366f1"
+                strokeWidth="1.5"
+                vectorEffect="non-scaling-stroke"
+              />
+            </svg>
           </div>
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        <Card className="bg-white/90 shadow-lg shadow-brand-200/40">
-          <CardHeader className="flex flex-row items-center justify-between">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+        <div className="bento-card p-8 flex flex-col relative overflow-hidden col-span-1 lg:col-span-3">
+          <div className="flex flex-wrap justify-between items-start mb-6 z-10 gap-4">
             <div>
-              <CardDescription>Active traces</CardDescription>
-              <CardTitle className="text-3xl">{totalTraces}</CardTitle>
+              <h3 className="text-lg font-medium text-slate-200">Live Ingestion Pulse</h3>
+              <p className="text-xs font-mono text-slate-500 mt-1">Event volume stream (last 24h)</p>
             </div>
-            <div className="rounded-2xl bg-brand-50 p-3 text-brand-600">
-              <Activity className="h-5 w-5" />
-            </div>
-          </CardHeader>
-          <CardContent className="text-sm text-slate-500">Streaming from deterministic demo agent runs.</CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardDescription>Cost posture</CardDescription>
-              <CardTitle className="text-3xl">{formatter.cost(avgCost)}</CardTitle>
-            </div>
-            <div className="rounded-2xl bg-amber-50 p-3 text-amber-600">
-              <CircleDollarSign className="h-5 w-5" />
-            </div>
-          </CardHeader>
-          <CardContent className="flex items-center justify-between text-sm text-slate-500">
-            <span>{errorCount} traces surfaced errors</span>
-            <span className="inline-flex items-center text-rose-500">
-              <AlertTriangle className="mr-1 h-4 w-4" />
-              {((errorCount / Math.max(totalTraces, 1)) * 100).toFixed(0)}%
-            </span>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardDescription>Environments</CardDescription>
-              <CardTitle className="text-3xl">{environmentCounts.length}</CardTitle>
-            </div>
-            <div className="rounded-2xl bg-blue-50 p-3 text-blue-600">
-              <Network className="h-5 w-5" />
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm text-slate-500">
-            {environmentCounts.map(([env, count]) => (
-              <div key={env} className="flex items-center justify-between">
-                <span>{env}</span>
-                <span className="font-semibold text-slate-700">{count}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="border border-brand-100/80 bg-white/80">
-        <CardHeader className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <CardTitle className="text-xl">Signal filters</CardTitle>
-              <CardDescription>Slice the dataset to focus on specific anomalies or latency buckets.</CardDescription>
-            </div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500">
-              <Filter className="h-3.5 w-3.5" />
-              View: {activeView}
+            <div className="flex bg-slate-800/50 border border-white/5 p-1 rounded-lg backdrop-blur-md">
+              <button className="px-3 py-1 text-[10px] font-mono font-medium rounded text-slate-400 hover:text-white transition-colors">
+                1H
+              </button>
+              <button className="px-3 py-1 text-[10px] font-mono font-medium rounded bg-white/10 text-white shadow-sm border border-white/5">
+                24H
+              </button>
+              <button className="px-3 py-1 text-[10px] font-mono font-medium rounded text-slate-400 hover:text-white transition-colors">
+                7D
+              </button>
             </div>
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex-1 w-full relative min-h-[280px] z-10">
+            <svg className="w-full h-full overflow-visible" viewBox="0 0 1000 100" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="mainChartGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.1" />
+                  <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
+                </linearGradient>
+                <filter id="glow-line" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+                  <feMerge>
+                    <feMergeNode in="coloredBlur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+              <line x1="0" x2="1000" y1="20" y2="20" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
+              <line x1="0" x2="1000" y1="40" y2="40" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
+              <line x1="0" x2="1000" y1="60" y2="60" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
+              <line x1="0" x2="1000" y1="80" y2="80" stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
+              <path
+                d="M0 80 Q 50 70, 100 75 T 200 60 T 300 65 T 400 40 T 500 55 T 600 30 T 700 45 T 800 35 T 900 50 L 1000 40 L 1000 100 L 0 100 Z"
+                fill="url(#mainChartGradient)"
+                opacity="0.3"
+              />
+              <path
+                d="M0 80 Q 50 70, 100 75 T 200 60 T 300 65 T 400 40 T 500 55 T 600 30 T 700 45 T 800 35 T 900 50 L 1000 40"
+                fill="none"
+                stroke="#22d3ee"
+                strokeWidth="1.5"
+                vectorEffect="non-scaling-stroke"
+                filter="url(#glow-line)"
+              />
+              <circle cx="400" cy="40" r="3" fill="#050507" stroke="#22d3ee" strokeWidth="1.5" />
+              <circle cx="600" cy="30" r="3" fill="#050507" stroke="#22d3ee" strokeWidth="1.5" />
+              <circle cx="900" cy="50" r="3" fill="#050507" stroke="#22d3ee" strokeWidth="1.5" />
+            </svg>
+          </div>
+        </div>
+        <div className="col-span-1 flex flex-col gap-6">
+          <div className="bento-card p-6 flex items-center gap-4">
+            <div className="h-10 w-10 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-400 border border-orange-500/20 shadow-[0_0_10px_rgba(251,146,60,0.1)]">
+              <span className="material-symbols-outlined text-[20px]">monetization_on</span>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] font-mono">Est. Cost</p>
+              <p className="text-xl font-mono font-medium text-slate-200 mt-0.5">{formatter.cost(avgCost)} / trace</p>
+            </div>
+          </div>
+          <div className="bento-card p-6 flex items-center gap-4">
+            <div className="h-10 w-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 border border-indigo-500/20 shadow-[0_0_10px_rgba(99,102,241,0.1)]">
+              <span className="material-symbols-outlined text-[20px]">alt_route</span>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] font-mono">Services</p>
+              <p className="text-xl font-mono font-medium text-slate-200 mt-0.5">
+                {Object.keys(serviceCounts).length} Active
+              </p>
+            </div>
+          </div>
+          <div className="bento-card p-6 flex items-center gap-4 bg-gradient-to-br from-cyan-950/40 to-slate-900/50 border-cyan-500/20 relative">
+            <div className="absolute inset-0 bg-cyan-500/5 blur-xl" />
+            <div className="relative z-10 flex items-center gap-4">
+              <div className="h-10 w-10 rounded-lg bg-cyan-500/20 flex items-center justify-center text-cyan-300 border border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.2)]">
+                <span className="material-symbols-outlined text-[20px]">bolt</span>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-cyan-500/70 uppercase tracking-[0.2em] font-mono">Health</p>
+                <p className="text-xl font-mono font-medium text-white mt-0.5 neon-text-glow">
+                  {successRate > 90 ? "Optimal" : "Degraded"}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="bento-card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.3em] font-mono text-slate-500">Agent leaderboard</p>
+              <p className="text-sm text-slate-400">Quick insight into which agents are producing the most telemetry.</p>
+            </div>
+            <span className="text-xs font-mono text-slate-500">Top 3</span>
+          </div>
+          <div className="space-y-4">
+            {serviceBreakdown.length === 0 ? (
+              <p className="text-sm text-slate-500">No services detected.</p>
+            ) : (
+              serviceBreakdown.map(([service, count], index) => (
+                <div key={service} className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 px-4 py-3">
+                  <div>
+                    <p className="text-slate-200">{service}</p>
+                    <p className="text-xs text-slate-500">{count} traces</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-mono text-cyan-400">RANK {index + 1}</p>
+                    <p className="text-xl font-mono text-slate-100">{count}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+        <div className="bento-card p-6 space-y-6">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.3em] font-mono text-slate-500">Quality Window</p>
+            <p className="text-3xl font-mono text-white mt-2">{successRate.toFixed(1)}%</p>
+            <p className="text-xs text-slate-500">Success calculated using OTLP status codes across the filtered slice.</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.3em] font-mono text-slate-500">Latest Anomaly</p>
+            <p className="text-sm text-slate-300 mt-2">
+              {latestAnomaly ? `${latestAnomaly.service_name} · ${latestAnomaly.status_code}` : "No errors in current filter"}
+            </p>
+          </div>
+        </div>
+        <div className="bento-card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.3em] font-mono text-slate-500">Signal Filters</p>
+              <p className="text-xs text-slate-500">Slice the dataset to focus on anomaly buckets.</p>
+            </div>
+            <span className="material-symbols-outlined text-slate-500">tune</span>
+          </div>
+          <div className="space-y-3">
             {viewPresets.map((preset) => {
               const href = preset.id === "all" ? "/" : `/?view=${preset.id}`;
               const isActive = activeView === preset.id;
@@ -196,117 +374,97 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   key={preset.id}
                   href={href}
                   className={cn(
-                    "min-w-[200px] rounded-2xl border px-4 py-3 text-sm transition hover:shadow-md",
-                    isActive
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-200 bg-white text-slate-600"
+                    "flex items-center justify-between rounded-xl border border-white/5 px-4 py-3 transition",
+                    isActive ? "bg-cyan-500/10 border-cyan-500/30 text-white" : "bg-white/5 text-slate-300 hover:bg-white/10"
                   )}
                 >
-                  <p className="font-semibold">{preset.label}</p>
-                  <p className="text-xs text-slate-500">{preset.description}</p>
+                  <div>
+                    <p className="text-sm font-medium">{preset.label}</p>
+                    <p className="text-xs text-slate-500">{preset.description}</p>
+                  </div>
+                  <span className="material-symbols-outlined text-[18px] text-cyan-400">arrow_forward</span>
                 </Link>
               );
             })}
           </div>
-        </CardHeader>
-      </Card>
+        </div>
+      </div>
 
-      <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
-        <Card className="p-0">
-          <CardHeader className="px-6 pt-6">
-            <CardTitle className="text-xl">Latest traces</CardTitle>
-            <CardDescription>Ingest events are idempotent and synced with the Postgres trace store.</CardDescription>
-          </CardHeader>
-          <CardContent className="px-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Trace</TableHead>
-                    <TableHead>Service</TableHead>
-                    <TableHead>Environment</TableHead>
-                    <TableHead>Started</TableHead>
-                    <TableHead>Duration</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Model</TableHead>
-                    <TableHead className="text-right">Tokens</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTraces.map((trace) => (
-                    <TableRow key={trace.trace_id} className="hover:bg-slate-50">
-                      <TableCell className="font-semibold">
-                        <Link href={`/traces/${trace.trace_id}`} className="text-brand-600 hover:underline">
-                          {trace.trace_id.slice(0, 12)}…
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-slate-600">{trace.service_name ?? "—"}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{trace.environment ?? "—"}</Badge>
-                      </TableCell>
-                      <TableCell className="text-slate-500">{formatter.date(trace.started_at)}</TableCell>
-                      <TableCell>{formatter.duration(trace.duration_ms)}</TableCell>
-                      <TableCell>
-                        {(() => {
-                          const label = trace.status_code ?? trace.error_type ?? "OK";
-                          return <Badge variant={statusTone(label)}>{label}</Badge>;
-                        })()}
-                      </TableCell>
-                      <TableCell>{trace.model ?? "—"}</TableCell>
-                      <TableCell className="text-right text-slate-500">
-                        {trace.token_in ?? 0}/{trace.token_out ?? 0}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-slate-900 text-white">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <LineChart className="h-4 w-4" />
-              Fleet focus
-            </CardTitle>
-            <CardDescription className="text-slate-300">
-              Quick insight into which agents are producing the most telemetry.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5 text-sm text-slate-200">
-            <div className="space-y-3">
-              {serviceBreakdown.map(([service, count], idx) => (
-                <div key={service} className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-white">{service}</span>
-                    <span className="text-slate-300">{count} traces</span>
+      <div className="bento-card p-6">
+        <div className="flex flex-wrap items-center justify-between mb-6 gap-4 px-1">
+          <div>
+            <h3 className="text-lg font-medium text-slate-200">Recent Activity</h3>
+            <p className="text-xs font-mono text-slate-500 mt-1">Live stream of agent interactions and spans</p>
+          </div>
+          <Link
+            href="http://localhost:8000/api/traces"
+            target="_blank"
+            className="text-xs font-mono text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-1 transition-colors"
+          >
+            VIEW INGEST API
+            <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+          </Link>
+        </div>
+        <div className="space-y-4">
+          <div className="grid grid-cols-12 px-6 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest font-mono">
+            <div className="col-span-3">Trace / Service</div>
+            <div className="col-span-2">Environment</div>
+            <div className="col-span-2">Model</div>
+            <div className="col-span-2">Status</div>
+            <div className="col-span-2">Duration</div>
+            <div className="col-span-1 text-right">Tokens</div>
+          </div>
+          {filteredTraces.length === 0 ? (
+            <p className="text-sm text-slate-500 px-6 py-4">No traces match this filter.</p>
+          ) : (
+            filteredTraces.slice(0, 12).map((trace) => {
+              const status = statusTone(trace.status_code, Boolean(trace.error_type));
+              const tokenCount = (trace.token_in ?? 0) + (trace.token_out ?? 0);
+              return (
+                <Link
+                  href={`/traces/${trace.trace_id}`}
+                  key={trace.trace_id}
+                  className="group relative bg-white/[0.02] border border-white/5 rounded-xl p-4 grid grid-cols-12 items-center hover:bg-white/[0.04] hover:border-white/10 hover:shadow-lg transition-all duration-300"
+                >
+                  <div className="col-span-3">
+                    <div className="flex items-center gap-4">
+                      <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center">
+                        <span className="material-symbols-outlined text-[18px] text-slate-400">hub</span>
+                      </div>
+                      <div>
+                        <p className="font-mono text-[10px] text-cyan-500/80 mb-0.5">
+                          {trace.trace_id?.slice(0, 10)}...
+                        </p>
+                        <p className="text-sm font-medium text-slate-300 group-hover:text-white">
+                          {trace.service_name ?? "demo"}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="h-2 w-full rounded-full bg-white/10">
-                    <div
-                      className="h-2 rounded-full bg-gradient-to-r from-brand-400 to-brand-600"
-                      style={{ width: `${(count / Math.max(totalTraces, 1)) * 100}%` }}
-                    />
+                  <div className="col-span-2">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono text-slate-400 bg-white/5 border border-white/5 uppercase tracking-widest">
+                      {trace.environment ?? "demo"}
+                    </span>
                   </div>
-                  <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Rank {idx + 1}</p>
-                </div>
-              ))}
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-300">Quality window</p>
-              <p className="mt-2 text-3xl font-semibold">{successRate.toFixed(1)}%</p>
-              <p className="text-sm text-slate-300">
-                Success calculated using OTLP status codes across the filtered slice.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-300">Latest anomaly</p>
-              <p className="mt-1 text-base">
-                {filteredTraces.find((trace) => trace.error_type)?.error_type ?? "No errors in current filter"}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+                  <div className="col-span-2 text-xs font-mono text-slate-400">{trace.model ?? "n/a"}</div>
+                  <div className="col-span-2">
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex h-2 w-2">
+                        <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", status.ping)} />
+                        <span className={cn("relative inline-flex rounded-full h-2 w-2", status.dot)} />
+                      </div>
+                      <span className="text-xs font-medium text-slate-300">
+                        {trace.error_type ?? trace.status_code ?? status.label}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="col-span-2 font-mono text-xs text-slate-400">{formatter.duration(trace.duration_ms)}</div>
+                  <div className="col-span-1 text-right font-mono text-xs text-slate-400">{tokenCount}</div>
+                </Link>
+              );
+            })
+          )}
+        </div>
       </div>
     </section>
   );
